@@ -7,11 +7,14 @@
 #include "Week4GameModeBase.generated.h"
 
 /**
- * 
+ *
  */
 UCLASS()
 class WEEK4_ASSIGNMENT_API AWeek4GameModeBase : public AGameModeBase
 {
 	GENERATED_BODY()
-	
+
+public:
+	virtual void OnPostLogin(AController* NewPlayer) override;
+
 };

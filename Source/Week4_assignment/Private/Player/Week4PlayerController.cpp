@@ -35,10 +35,31 @@ void AWeek4PlayerController::SetChatMessageString(const FString& InChatMessageSt
 {
 	ChatMessageString = InChatMessageString;
 
-	PrintChatMessageString(ChatMessageString);
+	if (IsLocalController() == true)
+	{
+		ServerRPCPrintChatMessageString(InChatMessageString);
+	}
 }
 
 void AWeek4PlayerController::PrintChatMessageString(const FString& InChatMessageString)
 {
 	Week4FunctionLibrary::MyPrintString(this, InChatMessageString, 10.f);
+}
+
+void AWeek4PlayerController::ServerRPCPrintChatMessageString_Implementation(const FString& InChatMessageString)
+{
+	for (TActorIterator<AWeek4PlayerController> It(GetWorld()); It; ++It)
+	{
+		AWeek4PlayerController* Week4PlayerController = *It;
+		if (IsValid(Week4PlayerController) == true)
+		{
+			// 찾은 각 플레이어들에게 "네 화면에 이 메시지 띄워!" 라고 명령합니다.
+			Week4PlayerController->ClientRPCPrintChatMessageString(InChatMessageString);
+		}
+	}
+}
+
+void AWeek4PlayerController::ClientRPCPrintChatMessageString_Implementation(const FString& InChatMessageString)
+{
+	PrintChatMessageString(InChatMessageString);
 }

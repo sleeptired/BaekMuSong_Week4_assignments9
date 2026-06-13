@@ -32,10 +32,10 @@ void UWeek4ChatInput::OnChatInputTextCommitted(const FText& Text, ETextCommit::T
 		APlayerController* OwningPlayerController = GetOwningPlayer();
 		if (IsValid(OwningPlayerController) == true)
 		{
-			AWeek4PlayerController* OwningCXPlayerController = Cast<AWeek4PlayerController>(OwningPlayerController);
-			if (IsValid(OwningCXPlayerController) == true)
+			AWeek4PlayerController* OwningWeek4PlayerController = Cast<AWeek4PlayerController>(OwningPlayerController);
+			if (IsValid(OwningWeek4PlayerController) == true)
 			{
-				OwningCXPlayerController->SetChatMessageString(Text.ToString());
+				OwningWeek4PlayerController->SetChatMessageString(Text.ToString());
 
 				EditableTextBox_ChatInput->SetText(FText());
 			}
