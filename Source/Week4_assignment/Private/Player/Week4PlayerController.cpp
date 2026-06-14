@@ -6,11 +6,23 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Week4_assignment/Week4_assignment.h"
 #include "EngineUtils.h"
+#include "Kismet/GameplayStatics.h"
+#include "Game/Week4GameModeBase.h"
+#include "Player/Week4PlayerState.h"
+#include "Net/UnrealNetwork.h"
+
+AWeek4PlayerController::AWeek4PlayerController()
+{
+	bReplicates = true;
+}
 
 void AWeek4PlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// UI는 오직 '내 컴퓨터 화면'에만 띄워야 합니다.
+	// 방장 컴퓨터(Listen Server)에는 내 컨트롤러와 남의 컨트롤러가 같이 존재하므로,
+	// IsLocalController()를 쓰지 않으면 내 화면에 남의 UI까지 2~3개가 겹침
 	if (IsLocalController() == true)
 	{
 		FInputModeUIOnly InputModeUIOnly;
@@ -29,6 +41,16 @@ void AWeek4PlayerController::BeginPlay()
 	{
 		return;
 	}
+
+	// [공지사항 위젯] 얘는 모두에게 화면을 띄워야 함
+	if (IsValid(NotificationTextWidgetClass) == true)
+	{
+		NotificationTextWidgetInstance = CreateWidget<UUserWidget>(this, NotificationTextWidgetClass);
+		if (IsValid(NotificationTextWidgetInstance) == true)
+		{
+			NotificationTextWidgetInstance->AddToViewport();
+		}
+	}
 }
 
 void AWeek4PlayerController::SetChatMessageString(const FString& InChatMessageString)
@@ -37,7 +59,14 @@ void AWeek4PlayerController::SetChatMessageString(const FString& InChatMessageSt
 
 	if (IsLocalController() == true)
 	{
-		ServerRPCPrintChatMessageString(InChatMessageString);
+		//ServerRPCPrintChatMessageString(InChatMessageString);
+		AWeek4PlayerState* Week4PS = GetPlayerState<AWeek4PlayerState>();
+		if (IsValid(Week4PS) == true)
+		{
+			FString CombinedMessageString = Week4PS->PlayerNameString + TEXT(": ") + InChatMessageString;
+
+			ServerRPCPrintChatMessageString(CombinedMessageString);
+		}
 	}
 }
 
@@ -46,15 +75,23 @@ void AWeek4PlayerController::PrintChatMessageString(const FString& InChatMessage
 	Week4FunctionLibrary::MyPrintString(this, InChatMessageString, 10.f);
 }
 
+void AWeek4PlayerController::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ThisClass, NotificationText);
+}
+
 void AWeek4PlayerController::ServerRPCPrintChatMessageString_Implementation(const FString& InChatMessageString)
 {
-	for (TActorIterator<AWeek4PlayerController> It(GetWorld()); It; ++It)
+
+	AGameModeBase* GM = UGameplayStatics::GetGameMode(this);
+	if (IsValid(GM) == true)
 	{
-		AWeek4PlayerController* Week4PlayerController = *It;
-		if (IsValid(Week4PlayerController) == true)
+		AWeek4GameModeBase* Week4GM = Cast<AWeek4GameModeBase>(GM);
+		if (IsValid(Week4GM) == true)
 		{
-			// 찾은 각 플레이어들에게 "네 화면에 이 메시지 띄워!" 라고 명령합니다.
-			Week4PlayerController->ClientRPCPrintChatMessageString(InChatMessageString);
+			Week4GM->PrintChatMessageString(this, InChatMessageString);
 		}
 	}
 }
