@@ -36,6 +36,12 @@ void AWeek4GameModeBase::OnPostLogin(AController* NewPlayer)
 			Week4GameStateBase->MulticastRPCBroadcastLoginMessage(Week4PS->PlayerNameString);
 		}
 	}
+
+	// 2명이 다 찼을 때 턴 시작
+	if (AllPlayerControllers.Num() == 2)
+	{
+		StartTurn();
+	}
 }
 
 FString AWeek4GameModeBase::GenerateSecretNumber()
@@ -173,7 +179,18 @@ void AWeek4GameModeBase::PrintChatMessageString(AWeek4PlayerController* InChatti
 		}
 	}
 	*/
+
 	AWeek4PlayerState* Week4PS = InChattingPlayerController->GetPlayerState<AWeek4PlayerState>();
+	AWeek4GameStateBase* Week4GS = GetGameState<AWeek4GameStateBase>();
+
+	if (IsValid(Week4GS) && IsValid(Week4PS))
+	{
+		if (Week4GS->CurrentTurnPlayerState != Week4PS)
+		{
+			InChattingPlayerController->ClientRPCPrintChatMessageString(TEXT("System: 상대방의 턴입니다. 기다려주세요."));
+			return; // 턴이 아니면 입력 무시!
+		}
+	}
 
 	// [예외 처리] 이미 기회를 모두 소진한 플레이어의 입력 차단
 	if (IsValid(Week4PS) && Week4PS->CurrentGuessCount >= Week4PS->MaxGuessCount)
@@ -230,6 +247,13 @@ void AWeek4GameModeBase::PrintChatMessageString(AWeek4PlayerController* InChatti
 	// 문자열에서 앞글자(스트라이크 숫자)만 뽑아서 숫자로 변환 후 승리/무승부 판정
 	int32 StrikeCount = FCString::Atoi(*JudgeResultString.Left(1));
 	JudgeGame(InChattingPlayerController, StrikeCount);
+
+	// JudgeGame 내부에서 승리/무승부가 결정되면 ResetTimerHandle이 켜집니다.
+	// 리셋 타이머가 안 돌아가고 있을 때만 턴을 넘깁니다.
+	if (GetWorld()->GetTimerManager().IsTimerActive(ResetTimerHandle) == false)
+	{
+		PassTurn();
+	}
 }
 
 void AWeek4GameModeBase::IncreaseGuessCount(AWeek4PlayerController* InChattingPlayerController)
@@ -262,6 +286,8 @@ void AWeek4GameModeBase::ResetGame()
 			Week4PlayerController->ClientRPCPrintChatMessageString(TEXT("System: 새로운 게임이 시작되었습니다! 정답을 맞춰보세요."));
 		}
 	}
+	CurrentTurnIndex = 0;
+	StartTurn();
 }
 
 void AWeek4GameModeBase::JudgeGame(AWeek4PlayerController* InChattingPlayerController, int InStrikeCount)
@@ -283,7 +309,7 @@ void AWeek4GameModeBase::JudgeGame(AWeek4PlayerController* InChattingPlayerContr
 				}
 			}
 		}
-
+		GetWorld()->GetTimerManager().ClearTimer(TurnTimerHandle);
 		// 5초 대기 후 리셋
 		GetWorld()->GetTimerManager().SetTimer(ResetTimerHandle, this, &AWeek4GameModeBase::ResetGame, 5.0f, false);
 	}
@@ -320,8 +346,112 @@ void AWeek4GameModeBase::JudgeGame(AWeek4PlayerController* InChattingPlayerContr
 					Week4PlayerController->NotificationText = FText::FromString(TEXT("Draw..."));
 				}
 			}
-
-			ResetGame(); // 새 게임 준비
+			GetWorld()->GetTimerManager().ClearTimer(TurnTimerHandle);
+			GetWorld()->GetTimerManager().SetTimer(ResetTimerHandle, this, &AWeek4GameModeBase::ResetGame, 5.0f, false);
 		}
 	}
+}
+
+void AWeek4GameModeBase::StartTurn()
+{
+	if (AllPlayerControllers.Num() == 0)
+	{
+		return;
+	}
+
+	AWeek4GameStateBase* Week4GS = GetGameState<AWeek4GameStateBase>();
+
+	if (IsValid(Week4GS))
+	{
+		// 시간 15초 리셋
+		Week4GS->TurnTimeRemaining = 15;
+
+		// 이번 턴의 주인 설정
+		AWeek4PlayerController* TurnController = AllPlayerControllers[CurrentTurnIndex].Get();
+		if (TurnController)
+		{
+			AWeek4PlayerState* TurnPS = TurnController->GetPlayerState<AWeek4PlayerState>();
+
+			Week4GS->CurrentTurnPlayerState = TurnPS;
+
+			// 누구 Turn인지 알려줌
+			if (IsValid(TurnPS))
+			{
+				FString TurnMessage = FString::Printf(TEXT("System: [%s]님의 턴입니다! (제한시간 15초)"), *TurnPS->PlayerNameString);
+				for (int32 i = 0; i < AllPlayerControllers.Num(); ++i)
+				{
+					AWeek4PlayerController* PC = AllPlayerControllers[i].Get();
+
+					if (IsValid(PC))
+					{
+						PC->ClientRPCPrintChatMessageString(TurnMessage);
+					}
+				}
+			}
+		}
+
+		// 1초마다 OnTurnTimerTicked 함수를 반복 실행하는 타이머 켜기
+		GetWorld()->GetTimerManager().SetTimer(TurnTimerHandle, this, &AWeek4GameModeBase::OnTurnTimerTicked, 1.0f, true);
+	}
+}
+
+void AWeek4GameModeBase::OnTurnTimerTicked()
+{
+	AWeek4GameStateBase* Week4GS = GetGameState<AWeek4GameStateBase>();
+	if (IsValid(Week4GS))
+	{
+		Week4GS->TurnTimeRemaining--; // 1초 깎기
+
+		// 시간이 0이 되는 경우
+		if (Week4GS->TurnTimeRemaining <= 0)
+		{
+			// 타이머 정지
+			GetWorld()->GetTimerManager().ClearTimer(TurnTimerHandle);
+
+			// 현재 턴 유저의 기회 1 차감
+			AWeek4PlayerController* TurnController = AllPlayerControllers[CurrentTurnIndex].Get();
+			if (TurnController)
+			{
+				IncreaseGuessCount(TurnController);
+				TurnController->ClientRPCPrintChatMessageString(TEXT("System: 시간 초과! 기회가 1회 소진되었습니다."));
+				JudgeGame(TurnController, 0);
+			}
+
+			// JudgeGame이 검사해 본 결과, 아직 기회가 남은 사람이 있는지 확인합니다.
+			bool bCanContinue = false;
+			for (int32 i = 0; i < AllPlayerControllers.Num(); ++i)
+			{
+				AWeek4PlayerController* PC = AllPlayerControllers[i].Get();
+				if (IsValid(PC))
+				{
+					AWeek4PlayerState* PS = PC->GetPlayerState<AWeek4PlayerState>();
+					// 단 한 명이라도 기회가 남아있다면 게임은 계속되어야 합니다!
+					if (IsValid(PS) && PS->CurrentGuessCount < PS->MaxGuessCount)
+					{
+						bCanContinue = true;
+						break;
+					}
+				}
+			}
+
+			// 기회가 남은 사람이 있을 때만 턴을 다음 사람에게 넘깁니다.
+			// (모두가 3/3이라면 턴을 넘기지 않고 리셋을 기다립니다)
+			if (bCanContinue)
+			{
+				PassTurn();
+			}
+		}
+	}
+}
+
+void AWeek4GameModeBase::PassTurn()
+{
+	// 타이머 정지
+	GetWorld()->GetTimerManager().ClearTimer(TurnTimerHandle);
+
+	// 다음 인덱스로 이동 (2명이면 0 -> 1 -> 0 -> 1 반복)
+	CurrentTurnIndex = (CurrentTurnIndex + 1) % AllPlayerControllers.Num();
+
+	// 다음 턴 시작
+	StartTurn();
 }

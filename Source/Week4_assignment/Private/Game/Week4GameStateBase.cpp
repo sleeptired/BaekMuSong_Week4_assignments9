@@ -4,6 +4,8 @@
 #include "Game/Week4GameStateBase.h"
 #include "Kismet/GameplayStatics.h"
 #include  "Player/Week4PlayerController.h"
+#include "Net/UnrealNetwork.h"
+#include "Player/Week4PlayerState.h"
 
 void AWeek4GameStateBase::MulticastRPCBroadcastLoginMessage_Implementation(const FString& InNameString)
 {
@@ -20,4 +22,18 @@ void AWeek4GameStateBase::MulticastRPCBroadcastLoginMessage_Implementation(const
 			}
 		}
 	}
+}
+
+AWeek4GameStateBase::AWeek4GameStateBase()
+{
+	bReplicates = true;
+	TurnTimeRemaining = 15;
+}
+
+void AWeek4GameStateBase::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AWeek4GameStateBase, TurnTimeRemaining);
+	DOREPLIFETIME(AWeek4GameStateBase, CurrentTurnPlayerState);
 }

@@ -34,10 +34,22 @@ public:
 
 	void JudgeGame(AWeek4PlayerController* InChattingPlayerController, int InStrikeCount); // 정상 입력이 들어올 때마다 승리,무승부 여부를 판단합니다.
 
+	// [도전과제] 턴 제어 함수들
+	void StartTurn();         // 턴 시작
+	void OnTurnTimerTicked(); // 1초마다 시간 깎기
+	void PassTurn();          // 턴 넘기기
+
 protected:
 	FString SecretNumberString;
 
 	TArray<TWeakObjectPtr<AWeek4PlayerController>> AllPlayerControllers;
 
-	FTimerHandle ResetTimerHandle;
+	FTimerHandle ResetTimerHandle; //리셋용
+
+	// 턴 타이머 핸들
+	FTimerHandle TurnTimerHandle;
+
+	// 현재 몇 번째 플레이어의 턴인지 저장하는 변수
+	int32 CurrentTurnIndex = 0;
+
 };
