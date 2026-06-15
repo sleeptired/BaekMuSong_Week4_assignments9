@@ -5,7 +5,6 @@
 #include "Game/Week4GameStateBase.h"
 #include "Player/Week4PlayerController.h"
 #include "Player/Week4PlayerState.h"
-#include "EngineUtils.h"
 
 void AWeek4GameModeBase::OnPostLogin(AController* NewPlayer)
 {
@@ -38,10 +37,46 @@ void AWeek4GameModeBase::OnPostLogin(AController* NewPlayer)
 	}
 
 	// 2명이 다 찼을 때 턴 시작
-	if (AllPlayerControllers.Num() == 2)
+	//if (AllPlayerControllers.Num() == 2)
+	//{
+	//	StartTurn();
+	//}
+}
+
+void AWeek4GameModeBase::Logout(AController* Exiting)
+{
+	AWeek4PlayerController* ExitingPC = Cast<AWeek4PlayerController>(Exiting);
+	if (ExitingPC)
 	{
-		StartTurn();
+		// 1. 전체 명부에서 삭제
+		for (int32 i = 0; i < AllPlayerControllers.Num(); ++i)
+		{
+			if (AllPlayerControllers[i].Get() == ExitingPC)
+			{
+				AllPlayerControllers.RemoveAt(i);
+				break;
+			}
+		}
+
+		// [추가] 실제 게임을 뛰던 플레이어 명부(Active)에서도 나간 사람을 지우고 인덱스를 정렬
+		for (int32 i = 0; i < ActivePlayerControllers.Num(); ++i)
+		{
+			if (ActivePlayerControllers[i].Get() == ExitingPC)
+			{
+				ActivePlayerControllers.RemoveAt(i);
+				if (CurrentTurnIndex > i)
+				{
+					CurrentTurnIndex--;
+				}
+				else if (CurrentTurnIndex >= ActivePlayerControllers.Num())
+				{
+					CurrentTurnIndex = 0;
+				}
+				break;
+			}
+		}
 	}
+	Super::Logout(Exiting);
 }
 
 FString AWeek4GameModeBase::GenerateSecretNumber()
@@ -61,6 +96,9 @@ FString AWeek4GameModeBase::GenerateSecretNumber()
 		// 한 번 뽑은 숫자는 배열에서 삭제하여 '중복'이 발생하지 않도록 함
 		Numbers.RemoveAt(Index);
 	}
+
+	//정답알기
+	UE_LOG(LogTemp, Warning, TEXT("[QA TEST] 생성된 정답 치트키 숫자 : %s"), *Result);
 
 	return Result;
 }
@@ -284,10 +322,18 @@ void AWeek4GameModeBase::ResetGame()
 
 			// 새 게임이 시작되었다고 모든 유저의 채팅창에 알려줍니다.
 			Week4PlayerController->ClientRPCPrintChatMessageString(TEXT("System: 새로운 게임이 시작되었습니다! 정답을 맞춰보세요."));
+			Week4PlayerController->bIsReady = false;
 		}
 	}
-	CurrentTurnIndex = 0;
-	StartTurn();
+	//CurrentTurnIndex = 0;
+	//StartTurn();
+
+	// [추가] 게임 상태를 대기로 변경
+	AWeek4GameStateBase* Week4GS = GetGameState<AWeek4GameStateBase>();
+	if (IsValid(Week4GS))
+	{
+		Week4GS->MatchState = EWeek4MatchState::Waiting;
+	}
 }
 
 void AWeek4GameModeBase::JudgeGame(AWeek4PlayerController* InChattingPlayerController, int InStrikeCount)
@@ -316,10 +362,12 @@ void AWeek4GameModeBase::JudgeGame(AWeek4PlayerController* InChattingPlayerContr
 	else
 	{
 		// 아무도 3스트라이크가 아니라면 무승부를 체크합니다.
+		// [추가] 무승부 검사는 오직 게임을 뛰고 있는 플레이어들(Active) 기준으로만 해야 합니다!
+		// 관전자가 기회가 0회라고 해서 무승부 판정이 방해받으면 안 되기 때문입니다.
 		bool bIsDraw = true;
-		for (int32 i = AllPlayerControllers.Num() - 1; i >= 0; --i)
+		for (int32 i = ActivePlayerControllers.Num() - 1; i >= 0; --i)
 		{
-			AWeek4PlayerController* Week4PlayerController = AllPlayerControllers[i].Get();
+			AWeek4PlayerController* Week4PlayerController = ActivePlayerControllers[i].Get();
 			if (IsValid(Week4PlayerController) == true)
 			{
 				AWeek4PlayerState* Week4PS = Week4PlayerController->GetPlayerState<AWeek4PlayerState>();
@@ -354,7 +402,7 @@ void AWeek4GameModeBase::JudgeGame(AWeek4PlayerController* InChattingPlayerContr
 
 void AWeek4GameModeBase::StartTurn()
 {
-	if (AllPlayerControllers.Num() == 0)
+	if (ActivePlayerControllers.Num() == 0)
 	{
 		return;
 	}
@@ -367,7 +415,7 @@ void AWeek4GameModeBase::StartTurn()
 		Week4GS->TurnTimeRemaining = 15;
 
 		// 이번 턴의 주인 설정
-		AWeek4PlayerController* TurnController = AllPlayerControllers[CurrentTurnIndex].Get();
+		AWeek4PlayerController* TurnController = ActivePlayerControllers[CurrentTurnIndex].Get();
 		if (TurnController)
 		{
 			AWeek4PlayerState* TurnPS = TurnController->GetPlayerState<AWeek4PlayerState>();
@@ -378,6 +426,7 @@ void AWeek4GameModeBase::StartTurn()
 			if (IsValid(TurnPS))
 			{
 				FString TurnMessage = FString::Printf(TEXT("System: [%s]님의 턴입니다! (제한시간 15초)"), *TurnPS->PlayerNameString);
+				// 턴 알림 채팅은 구경하는 난입자(All)도 봐야 하므로 AllPlayerControllers 유지
 				for (int32 i = 0; i < AllPlayerControllers.Num(); ++i)
 				{
 					AWeek4PlayerController* PC = AllPlayerControllers[i].Get();
@@ -409,7 +458,7 @@ void AWeek4GameModeBase::OnTurnTimerTicked()
 			GetWorld()->GetTimerManager().ClearTimer(TurnTimerHandle);
 
 			// 현재 턴 유저의 기회 1 차감
-			AWeek4PlayerController* TurnController = AllPlayerControllers[CurrentTurnIndex].Get();
+			AWeek4PlayerController* TurnController = ActivePlayerControllers[CurrentTurnIndex].Get();
 			if (TurnController)
 			{
 				IncreaseGuessCount(TurnController);
@@ -419,9 +468,9 @@ void AWeek4GameModeBase::OnTurnTimerTicked()
 
 			// JudgeGame이 검사해 본 결과, 아직 기회가 남은 사람이 있는지 확인합니다.
 			bool bCanContinue = false;
-			for (int32 i = 0; i < AllPlayerControllers.Num(); ++i)
+			for (int32 i = 0; i < ActivePlayerControllers.Num(); ++i)
 			{
-				AWeek4PlayerController* PC = AllPlayerControllers[i].Get();
+				AWeek4PlayerController* PC = ActivePlayerControllers[i].Get();
 				if (IsValid(PC))
 				{
 					AWeek4PlayerState* PS = PC->GetPlayerState<AWeek4PlayerState>();
@@ -450,8 +499,44 @@ void AWeek4GameModeBase::PassTurn()
 	GetWorld()->GetTimerManager().ClearTimer(TurnTimerHandle);
 
 	// 다음 인덱스로 이동 (2명이면 0 -> 1 -> 0 -> 1 반복)
-	CurrentTurnIndex = (CurrentTurnIndex + 1) % AllPlayerControllers.Num();
+	CurrentTurnIndex = (CurrentTurnIndex + 1) % ActivePlayerControllers.Num();
 
 	// 다음 턴 시작
 	StartTurn();
+}
+
+//추가 파트
+void AWeek4GameModeBase::CheckAllPlayersReady()
+{
+	int32 ReadyCount = 0;
+
+	// 전체 인원 중 몇 명이 준비했는지 셉니다.
+	for (int32 i = 0; i < AllPlayerControllers.Num(); ++i)
+	{
+		AWeek4PlayerController* PC = AllPlayerControllers[i].Get();
+		if (IsValid(PC) && PC->bIsReady)
+		{
+			ReadyCount++;
+		}
+	}
+
+	// 방에 2명 이상 있고, 모든 사람이 준비 완료(Ready) 상태라면 게임 시작!
+	if (AllPlayerControllers.Num() >= 2 && ReadyCount == AllPlayerControllers.Num())
+	{
+		AWeek4GameStateBase* Week4GS = GetGameState<AWeek4GameStateBase>();
+		if (IsValid(Week4GS))
+		{
+			Week4GS->MatchState = EWeek4MatchState::Playing; // 상태를 게임 중으로 변경!
+		}
+
+		// [추가] 게임 시작 버튼을 누른 현재 플레이어만 명부에 등록
+		ActivePlayerControllers.Empty();
+		for (int32 i = 0; i < AllPlayerControllers.Num(); ++i)
+		{
+			ActivePlayerControllers.Add(AllPlayerControllers[i]);
+		}
+
+		CurrentTurnIndex = 0;
+		StartTurn();
+	}
 }

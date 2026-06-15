@@ -82,6 +82,24 @@ void AWeek4PlayerController::GetLifetimeReplicatedProps(TArray<class FLifetimePr
 	DOREPLIFETIME(ThisClass, NotificationText);
 }
 
+//추가 부분
+void AWeek4PlayerController::ServerRPCPlayerReady_Implementation()
+{
+	if (bIsReady == true) // 이미 눌렀으면 무시
+	{
+		return;
+	}
+
+	bIsReady = true;
+
+	// 게임 모드에게 "나 준비했으니 인원 체크해봐!" 라고 전달
+	AGameModeBase* GM = UGameplayStatics::GetGameMode(this);
+	if (AWeek4GameModeBase* Week4GM = Cast<AWeek4GameModeBase>(GM))
+	{
+		Week4GM->CheckAllPlayersReady();
+	}
+}
+
 void AWeek4PlayerController::ServerRPCPrintChatMessageString_Implementation(const FString& InChatMessageString)
 {
 

@@ -18,6 +18,9 @@ class WEEK4_ASSIGNMENT_API AWeek4GameModeBase : public AGameModeBase
 public:
 	virtual void OnPostLogin(AController* NewPlayer) override; // 클라이언트가 게임 방(서버)에 접속을 완료했을 때 언리얼 엔진이 호출함.
 
+	// [추가] 유저가 방을 나갈 때 엔진이 호출하는 함수
+	virtual void Logout(AController* Exiting) override;
+
 	FString GenerateSecretNumber(); // 게임이 처음 시작되거나(BeginPlay), 리셋(ResetGame)될 때 정답을 만듬
 
 	bool IsGuessNumberString(const FString& InNumberString); // 사용자가 숫자를 입력했을 때 정상적인 숫자인지 논리 검사
@@ -39,10 +42,15 @@ public:
 	void OnTurnTimerTicked(); // 1초마다 시간 깎기
 	void PassTurn();          // 턴 넘기기
 
+	// [추가] 플레이어 준비 상태 확인
+	void CheckAllPlayersReady();
 protected:
 	FString SecretNumberString;
 
 	TArray<TWeakObjectPtr<AWeek4PlayerController>> AllPlayerControllers;
+
+	// [추가] 이번 판을 플레이하고 있는 유저 명부 (턴제 제어용)
+	TArray<TWeakObjectPtr<AWeek4PlayerController>> ActivePlayerControllers;
 
 	FTimerHandle ResetTimerHandle; //리셋용
 

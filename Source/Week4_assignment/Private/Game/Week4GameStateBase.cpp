@@ -28,6 +28,7 @@ AWeek4GameStateBase::AWeek4GameStateBase()
 {
 	bReplicates = true;
 	TurnTimeRemaining = 15;
+	MatchState = EWeek4MatchState::Waiting;
 }
 
 void AWeek4GameStateBase::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
@@ -36,4 +37,5 @@ void AWeek4GameStateBase::GetLifetimeReplicatedProps(TArray<class FLifetimePrope
 
 	DOREPLIFETIME(AWeek4GameStateBase, TurnTimeRemaining);
 	DOREPLIFETIME(AWeek4GameStateBase, CurrentTurnPlayerState);
+	DOREPLIFETIME(AWeek4GameStateBase, MatchState);
 }

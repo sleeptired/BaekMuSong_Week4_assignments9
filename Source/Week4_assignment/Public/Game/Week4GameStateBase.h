@@ -10,6 +10,14 @@ class AWeek4PlayerState;
 /**
  *
  */
+
+UENUM(BlueprintType)
+enum class EWeek4MatchState : uint8
+{
+	Waiting,
+	Playing
+};
+
 UCLASS()
 class WEEK4_ASSIGNMENT_API AWeek4GameStateBase : public AGameStateBase
 {
@@ -30,4 +38,8 @@ public:
 	//  UI에서 누구 턴인지 확인할떄 사용
 	UPROPERTY(Replicated, BlueprintReadOnly)
 	TObjectPtr<AWeek4PlayerState> CurrentTurnPlayerState;
+
+	// [추가] 게임 준비, 종료 상태
+	UPROPERTY(Replicated, BlueprintReadOnly)
+	EWeek4MatchState MatchState;
 };

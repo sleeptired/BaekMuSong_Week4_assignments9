@@ -31,6 +31,10 @@ public:
 	void ServerRPCPrintChatMessageString(const FString& InChatMessageString); // 클라이언트가 호출하지만, 실제 코드는 '서버 컴퓨터'에서만 돌아가는 로직
 
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override; // 네트워크로 복제할 변수를 등록하는 로직
+
+	UFUNCTION(Server, Reliable)
+	void ServerRPCPlayerReady();
+
 protected:
 	UPROPERTY(EditDefaultsOnly)
 	TSubclassOf<UWeek4ChatInput> ChatInputWidgetClass;
@@ -49,4 +53,6 @@ protected:
 public:
 	UPROPERTY(Replicated, BlueprintReadOnly)
 	FText NotificationText;
+
+	bool bIsReady = false;
 };
