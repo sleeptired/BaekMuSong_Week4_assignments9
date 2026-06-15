@@ -80,6 +80,7 @@ void AWeek4PlayerController::GetLifetimeReplicatedProps(TArray<class FLifetimePr
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ThisClass, NotificationText);
+	DOREPLIFETIME(ThisClass, bIsReady);
 }
 
 //추가 부분

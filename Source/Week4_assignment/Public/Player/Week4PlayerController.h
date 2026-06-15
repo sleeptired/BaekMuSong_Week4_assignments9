@@ -54,5 +54,6 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly)
 	FText NotificationText;
 
+		UPROPERTY(Replicated, BlueprintReadOnly)
 	bool bIsReady = false;
 };
